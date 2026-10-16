@@ -6,6 +6,20 @@ LARGEUR_ECRAN = 1600
 HAUTEUR_ECRAN = 1200
 TAILLE_CASE = 10
 
+
+# --- NUANCES DE GRIS ---
+pyxel.colors.append(0x1F1F1F)
+pyxel.colors.append(0x404040)
+pyxel.colors.append(0x737373)
+pyxel.colors.append(0xB0B0B0)
+
+# --- NUANCES DE MARRON ---
+pyxel.colors.append(0x2B1810)
+pyxel.colors.append(0x4A2E1B)
+pyxel.colors.append(0x784F31)
+pyxel.colors.append(0xA67A56)
+
+
 pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
 
 grille = [[0 for y in range(LIGNES)] for x in range(COLLONNES)]
