@@ -8,9 +8,10 @@ TAILLE_CASE = 10
 
 pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
 
-grille = [[[0] for y in range(LIGNES)] for x in range(COLLONNES)]
+grille = [[0 for y in range(LIGNES)] for x in range(COLLONNES)]
 
-grille[20]
+grille[10][10] = 1
+grille[30][30] = 2
 
 def update():
     if pyxel.btnp(pyxel.KEY_ESCAPE):
