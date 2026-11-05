@@ -44,8 +44,15 @@ pyxel.colors[:] = PALETTE
 
 ID_COULEUR_ENTITES = {i + 1 : {"remplissage": i + 4, "frontiere": i + 4 + N} for i in range(N)}
 
-
 ### FIN PARTIE COULEUR
+
+def couleurCase(x, y):
+    propietaire = grille[x][y]
+    if proprietaire == 0:
+        return terrain[x][y]
+    if isFrontiere(x, y):
+        return ID_COULEUR_ENTITES[proprietaire]["frontiere"]
+    return ID_COULEUR_ENTITES[proprietaire]["remplissage"]
 
 pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
 pyxel.mouse(True)
@@ -207,12 +214,7 @@ def draw():
             x = ORIGINE_X + indice_ligne * TAILLE_CASE
             y = ORIGINE_Y + indice_collonnes * TAILLE_CASE
 
-            if proprietaire == 0:
-                couleur = terrain[indice_ligne][indice_collonnes]
-            elif isFrontiere(indice_ligne, indice_collonnes):
-                couleur = ID_COULEUR_ENTITES[proprietaire]["frontiere"]
-            else:
-                couleur = ID_COULEUR_ENTITES[proprietaire]["remplissage"]
+            couleur = couleurCase(indice_ligne, indice_collonnes)
 
             pyxel.rect(
                 x,
