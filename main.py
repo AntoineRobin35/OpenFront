@@ -46,6 +46,25 @@ ID_COULEUR_ENTITES = {i + 1 : {"remplissage": i + 4, "frontiere": i + 4 + N} for
 
 ### FIN PARTIE COULEUR
 
+pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
+pyxel.mouse(True)
+
+carte = pyxel.Image(LIGNES, COLLONNES)
+
+def reddessiner(cases):
+    a_refaire = set()
+    for x, y in cases:
+        a_refaire.add(x, y)
+        a_refaire.update(voisins(x, y))
+    for x, y in a_refaire:
+        carte.pset(x, y, couleurCase(x, y))
+
+def reddessinerTout():
+    for x in range(LIGNES):
+        for y in range(COLLONNES):
+            carte.pset(x, y, couleurCase(x, y))
+
+
 def couleurCase(x, y):
     propietaire = grille[x][y]
     if proprietaire == 0:
@@ -53,10 +72,6 @@ def couleurCase(x, y):
     if isFrontiere(x, y):
         return ID_COULEUR_ENTITES[proprietaire]["frontiere"]
     return ID_COULEUR_ENTITES[proprietaire]["remplissage"]
-
-pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
-pyxel.mouse(True)
-
 
 
 grille = [[0 for y in range(COLLONNES)] for x in range(LIGNES)]
@@ -114,6 +129,7 @@ grille[31][30] = 2
 grille[30][31] = 2
 grille[31][31] = 2
 
+reddessinerTout()
 
 def isFrontiere(x, y):
     proprietaire = grille[x][y]
@@ -194,6 +210,8 @@ def etapeAttaque():
 
     for x, y in case:
         grille[x][y] = attaque["attaquant"]
+        
+    reddessiner(case)
 
 
 def update():
@@ -227,6 +245,7 @@ def draw():
         pyxel.text(200, 200, f"La derniere case cliqué est {derniere_case_cliquee}", 7)
     if attaque is not None:
         pyxel.text(200, 220, f"Attaquant : {attaque['attaquant']}, cible : {attaque['cible']}", 7)
+    pyxel.blt(ORIGINE_X, ORIGINE_Y, carte, 0, 0, LIGNES, COLLONNES, scale=TAILLE_CASE)
 
 print(voisins(5, 17))
 pyxel.run(update, draw)
