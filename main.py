@@ -5,8 +5,8 @@ import colorsys
 
 largeur, hauteur = pyautogui.size()
 
-LIGNES = 500
-COLLONNES = 500
+LIGNES = 40
+COLLONNES = 40
 LARGEUR_ECRAN = largeur
 HAUTEUR_ECRAN = hauteur
 TAILLE_CASE = 10
@@ -50,28 +50,6 @@ pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")
 pyxel.mouse(True)
 
 carte = pyxel.Image(LIGNES, COLLONNES)
-
-def reddessiner(cases):
-    a_refaire = set()
-    for x, y in cases:
-        a_refaire.add(x, y)
-        a_refaire.update(voisins(x, y))
-    for x, y in a_refaire:
-        carte.pset(x, y, couleurCase(x, y))
-
-def reddessinerTout():
-    for x in range(LIGNES):
-        for y in range(COLLONNES):
-            carte.pset(x, y, couleurCase(x, y))
-
-
-def couleurCase(x, y):
-    propietaire = grille[x][y]
-    if proprietaire == 0:
-        return terrain[x][y]
-    if isFrontiere(x, y):
-        return ID_COULEUR_ENTITES[proprietaire]["frontiere"]
-    return ID_COULEUR_ENTITES[proprietaire]["remplissage"]
 
 
 grille = [[0 for y in range(COLLONNES)] for x in range(LIGNES)]
@@ -129,8 +107,6 @@ grille[31][30] = 2
 grille[30][31] = 2
 grille[31][31] = 2
 
-reddessinerTout()
-
 def isFrontiere(x, y):
     proprietaire = grille[x][y]
 
@@ -150,6 +126,28 @@ def isFrontiere(x, y):
         return True
 
     return False
+
+def couleurCase(x, y):
+    proprietaire = grille[x][y]
+    if proprietaire == 0:
+        return terrain[x][y]
+    if isFrontiere(x, y):
+        return ID_COULEUR_ENTITES[proprietaire]["frontiere"]
+    return ID_COULEUR_ENTITES[proprietaire]["remplissage"]
+
+def reddessiner(cases):
+    a_refaire = set()
+    for x, y in cases:
+        a_refaire.add((x, y))
+        a_refaire.update(voisins(x, y))
+    for x, y in a_refaire:
+        carte.pset(x, y, couleurCase(x, y))
+
+def reddessinerTout():
+    for x in range(LIGNES):
+        for y in range(COLLONNES):
+            carte.pset(x, y, couleurCase(x, y))
+reddessinerTout()
 
 def caseSousCurseur():
     # Position de la souris dans la grille
@@ -212,7 +210,6 @@ def etapeAttaque():
         grille[x][y] = attaque["attaquant"]
         
     reddessiner(case)
-
 
 def update():
     if pyxel.btnp(pyxel.KEY_ESCAPE):
