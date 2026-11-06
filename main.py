@@ -118,7 +118,7 @@ def candidatsInitiaux(attaquant, cible):
             if grille[x][y] == cible and estConquerable(x, y):
                 for nx, ny in voisins(x, y):
                     if grille[nx][ny] == attaquant:
-                        resultat.add((nx, ny))
+                        resultat.add((x, y))
                         break
                     
     return resultat
@@ -243,5 +243,5 @@ ORIGINE_Y = HAUTEUR_ECRAN // 2 - (TAILLE_CASE * COLLONNES) // 2
 def draw():
     pyxel.cls(20)
     pyxel.blt(ORIGINE_X, ORIGINE_Y, carte, 0, 0, LIGNES, COLLONNES, scale=TAILLE_CASE)
-print(candidatsInitiaux(2, 20))
+print(candidatsInitiaux(2, 0))
 pyxel.run(update, draw)
