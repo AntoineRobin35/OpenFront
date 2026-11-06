@@ -1,14 +1,13 @@
 import pyxel
-import pyautogui
+
 import colorsys
 
 
-largeur, hauteur = pyautogui.size()
 
 LIGNES = 40
 COLLONNES = 40
-LARGEUR_ECRAN = largeur
-HAUTEUR_ECRAN = hauteur
+LARGEUR_ECRAN = 1200
+HAUTEUR_ECRAN = 800
 TAILLE_CASE = 10
 
 VITESSE_ATTAQUE = 5
@@ -107,6 +106,23 @@ grille[31][30] = 2
 grille[30][31] = 2
 grille[31][31] = 2
 
+TERRAINS_CONQUERABLE = (0, 1, 2)
+
+def estConquerable(x, y):
+    return terrain[x][y] in TERRAINS_CONQUERABLE
+
+def candidatsInitiaux(attaquant, cible):
+    resultat = set()
+    for x in range(LIGNES):
+        for y in range(COLLONNES):
+            if grille[x][y] == cible and estConquerable(x, y):
+                for nx, ny in voisins(x, y):
+                    if grille[nx][ny] == attaquant:
+                        resultat.add((nx, ny))
+                        break
+                    
+    return resultat
+
 def isFrontiere(x, y):
     proprietaire = grille[x][y]
 
@@ -171,9 +187,11 @@ def click():
     grille_x, grille_y = case
     proprietaire = grille[grille_x][grille_y]
     derniere_case_cliquee = (grille_x, grille_y, proprietaire)
-
+    
+    
     if proprietaire != JOUEUR_ACTUEL:
-        attaque = {"attaquant": JOUEUR_ACTUEL, "cible": proprietaire}
+        candidats = candidatsInitiaux(JOUEUR_ACTUEL, proprietaire)
+        attaque = {"attaquant": JOUEUR_ACTUEL, "cible": proprietaire, "candidats": candidats}
 
 def voisins(x, y):
     resultat = []
@@ -224,25 +242,6 @@ ORIGINE_Y = HAUTEUR_ECRAN // 2 - (TAILLE_CASE * COLLONNES) // 2
 
 def draw():
     pyxel.cls(20)
-    for indice_ligne, ligne in enumerate(grille):
-        for indice_collonnes, proprietaire in enumerate(ligne):
-            x = ORIGINE_X + indice_ligne * TAILLE_CASE
-            y = ORIGINE_Y + indice_collonnes * TAILLE_CASE
-
-            couleur = couleurCase(indice_ligne, indice_collonnes)
-
-            pyxel.rect(
-                x,
-                y,
-                TAILLE_CASE,
-                TAILLE_CASE,
-                couleur)
-
-    if derniere_case_cliquee is not None:
-        pyxel.text(200, 200, f"La derniere case cliqué est {derniere_case_cliquee}", 7)
-    if attaque is not None:
-        pyxel.text(200, 220, f"Attaquant : {attaque['attaquant']}, cible : {attaque['cible']}", 7)
     pyxel.blt(ORIGINE_X, ORIGINE_Y, carte, 0, 0, LIGNES, COLLONNES, scale=TAILLE_CASE)
-
-print(voisins(5, 17))
+print(candidatsInitiaux(2, 20))
 pyxel.run(update, draw)
