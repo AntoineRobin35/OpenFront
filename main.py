@@ -2,6 +2,7 @@ import pyxel
 from random import random
 import colorsys
 
+
 LIGNES = 40
 COLLONNES = 40
 LARGEUR_ECRAN = 1200
