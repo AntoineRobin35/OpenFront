@@ -7,19 +7,21 @@ import random
 
 
 ## Dimensions de la carte et de l'écran
-LIGNES = 500
-COLLONNES = 500
-LARGEUR_ECRAN = 1200
-HAUTEUR_ECRAN = 800
+LIGNES = 500 # Nombre de ligne
+COLLONNES = 500 # Nombre de colonnes
+LARGEUR_ECRAN = 1200 # Taille de la largeur de l'écran
+HAUTEUR_ECRAN = 800 # Taille de la hauteur de l'écran
 ## Fin des dimensions de la carte et de l'écran
 
 
 ## Outils généraux utilisés partout
 def borner(valeur, mini, maxi):
+    """Fonction pour conserver une valeur entre deux bornes"""
     return max(mini, min(maxi, valeur))
 
 
 def voisins(x, y):
+    """Fonction qui trouve les voisins horizontaux et verticaux d'une case"""
     resultat = []
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
         nx, ny = x + dx, y + dy
