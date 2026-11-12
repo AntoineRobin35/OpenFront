@@ -1,15 +1,91 @@
 import pyxel
 from random import randint, choice
 from colorsys import rgb_to_hls, hls_to_rgb
+import random
 
-LIGNES = 40
-COLLONNES = 40
+NIVEAU_MER = 0.36        # sous cette hauteur : eau
+LIMITE_HERBE = 0.56      # entre la mer et cette hauteur : herbe
+LIMITE_TERRE = 0.66      # entre l'herbe et cette hauteur : terre, au-dessus : montagne
+FORCE_ILE = 0.2          # plus c'est grand, plus les bords de la carte sont de l'eau
+
+# (taille d'une maille pour une carte de 500 cases, poids dans le mélange)
+OCTAVES = [(64, 1.0), (32, 0.5), (16, 0.25), (8, 0.125)]
+
+
+def genererBruitLisse(nombre_lignes, nombre_colonnes, taille_maille, generateur_aleatoire):
+    mailles_en_hauteur = nombre_lignes // taille_maille + 2
+    mailles_en_largeur = nombre_colonnes // taille_maille + 2
+    valeur_aux_coins = [[generateur_aleatoire.random() for _ in range(mailles_en_largeur)]
+                        for _ in range(mailles_en_hauteur)]
+
+    progression_lisse = []
+    for decalage_dans_la_maille in range(taille_maille):
+        avancement = decalage_dans_la_maille / taille_maille
+        progression_lisse.append(avancement * avancement * (3 - 2 * avancement))
+
+    bruit = []
+    for ligne in range(nombre_lignes):
+        numero_maille_ligne = ligne // taille_maille
+        progression_verticale = progression_lisse[ligne % taille_maille]
+        coins_du_haut = valeur_aux_coins[numero_maille_ligne]
+        coins_du_bas = valeur_aux_coins[numero_maille_ligne + 1]
+        rangee = []
+        for colonne in range(nombre_colonnes):
+            numero_maille_colonne = colonne // taille_maille
+            progression_horizontale = progression_lisse[colonne % taille_maille]
+            valeur_en_haut = (coins_du_haut[numero_maille_colonne] * (1 - progression_horizontale)
+                              + coins_du_haut[numero_maille_colonne + 1] * progression_horizontale)
+            valeur_en_bas = (coins_du_bas[numero_maille_colonne] * (1 - progression_horizontale)
+                             + coins_du_bas[numero_maille_colonne + 1] * progression_horizontale)
+            rangee.append(valeur_en_haut * (1 - progression_verticale) + valeur_en_bas * progression_verticale)
+        bruit.append(rangee)
+    return bruit
+
+
+def genererTerrain(nombre_lignes, nombre_colonnes, graine=None):
+    """Renvoie terrain[ligne][colonne] avec 0 herbe, 1 terre, 2 montagne, 3 eau."""
+    generateur_aleatoire = random.Random(graine)
+    somme_des_poids = sum(poids for _, poids in OCTAVES)
+
+    altitude = [[0.0] * nombre_colonnes for _ in range(nombre_lignes)]
+    for taille_maille_reference, poids in OCTAVES:
+        taille_maille = max(2, round(taille_maille_reference * max(nombre_lignes, nombre_colonnes) / 500))
+        bruit = genererBruitLisse(nombre_lignes, nombre_colonnes, taille_maille, generateur_aleatoire)
+        for ligne in range(nombre_lignes):
+            for colonne in range(nombre_colonnes):
+                altitude[ligne][colonne] += bruit[ligne][colonne] * poids / somme_des_poids
+
+    terrain = []
+    for ligne in range(nombre_lignes):
+        ecart_vertical_au_centre = (ligne / nombre_lignes - 0.5) * 2
+        rangee = []
+        for colonne in range(nombre_colonnes):
+            ecart_horizontal_au_centre = (colonne / nombre_colonnes - 0.5) * 2
+            distance_au_centre = min(1.0, (ecart_horizontal_au_centre ** 2 + ecart_vertical_au_centre ** 2) ** 0.5)
+            hauteur = altitude[ligne][colonne] - FORCE_ILE * distance_au_centre ** 3
+            if hauteur < NIVEAU_MER:
+                rangee.append(3)
+            elif hauteur < LIMITE_HERBE:
+                rangee.append(0)
+            elif hauteur < LIMITE_TERRE:
+                rangee.append(1)
+            else:
+                rangee.append(2)
+        terrain.append(rangee)
+    return terrain
+
+
+
+LIGNES = 500
+COLLONNES = 500
 LARGEUR_ECRAN = 1200
 HAUTEUR_ECRAN = 800
 TAILLE_CASE = 10
 
 ORIGINE_X = LARGEUR_ECRAN // 2 - (TAILLE_CASE * COLLONNES) // 2
 ORIGINE_Y = HAUTEUR_ECRAN // 2 - (TAILLE_CASE * LIGNES) // 2
+
+terrain = genererTerrain(LIGNES, COLLONNES)
 
 VITESSE_ATTAQUE = 3
 
@@ -91,95 +167,12 @@ carte = pyxel.Image(LIGNES, COLLONNES)
 
 grille = [[0 for y in range(COLLONNES)] for x in range(LIGNES)]
 
-terrain = [
-    [0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0,
-     0, 3],
-    [0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-     0, 0],
-    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-     1, 0],
-    [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-     1, 1],
-    [2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-     2, 1],
-    [2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2,
-     2, 2],
-    [2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2,
-     2, 2],
-    [2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2,
-     2, 2],
-    [2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 1, 1, 2, 2, 2,
-     2, 2],
-    [2, 2, 2, 1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 2, 2, 2,
-     2, 2],
-    [2, 2, 2, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 2, 2,
-     2, 2],
-    [2, 2, 1, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2,
-     2, 2],
-    [2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 1, 2,
-     2, 2],
-    [2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2,
-     2, 2],
-    [2, 1, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2,
-     2, 2],
-    [2, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 1,
-     2, 2],
-    [1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 1,
-     2, 2],
-    [1, 0, 0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 0, 0, 0, 0, 0, 1,
-     1, 1],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-     0, 1],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-     0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0,
-     0, 0],
-    [3, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
-     3, 3],
-    [3, 3, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 1, 1, 1, 0, 0, 0, 3,
-     3, 3],
-    [3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 3,
-     3, 3],
-    [3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3,
-     3, 3],
-    [3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3,
-     3, 3],
-    [3, 3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3,
-     3, 3],
-    [3, 3, 3, 0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 0, 0, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 0, 0, 0, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 3, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-     3, 3],
-    [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-     3, 0],
-    [0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-     0, 0],
-    [0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0,
-     0, 1],
-    [0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0,
-     0, 1],
-    [1, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0,
-     1, 2],
-]
+grille[100][100] = 1
 
-grille[20][20] = 1
-
-grille[19][5] = 16
-grille[19][12] = 17
-grille[19][26] = 18
-grille[19][34] = 19
+grille[190][50] = 16
+grille[250][250] = 17
+grille[400][100] = 18
+grille[150][400] = 19
 
 grille[30][30] = 2
 grille[31][30] = 2
