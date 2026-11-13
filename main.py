@@ -49,9 +49,9 @@ terrain = []
 
 
 def genererBruitLisse(nombre_ligne, nombre_colonnes, taille_maille, generateur_aleatoire):
-    """Crée une grille de bruit lisse : des valeurs aléatoires placées aux coins de grosses mailles, puis adoucies entre elles.
+    """Crée une grille de bruit lisse : estimer en fonction de la position de la case sa valeur en fonction des coins de la maille.
     Entrée : le nombre de lignes, le nombre de colonnes, la taille d'une maille, le générateur aléatoire à utiliser.
-    Sortie : une grille (liste de listes) de nombres entre 0 et 1."""
+    Sortie : une grille (liste de listes) de nombres entre 0 et 1 qui représente la forme de la carte."""
     nbr_maille_hauteur = nombre_ligne // taille_maille + 2
     nbr_maille_largeur = nombre_colonnes // taille_maille + 2
 
@@ -83,7 +83,7 @@ def genererBruitLisse(nombre_ligne, nombre_colonnes, taille_maille, generateur_a
 
 
 def genererTerrain(nombre_lignes, nombre_colonnes, graine=None, parametres=PARAMETRES_CARTE_PAR_DEFAUT):
-    """Génère la carte : mélange plusieurs bruits lisses, creuse les bords pour faire une île, puis découpe en types de terrain.
+    """Génère la carte : mélange plusieurs bruits lisses, abaisse les bords pour faire une île, puis transforme les valeurs en type de terrain.
     Entrée : le nombre de lignes, le nombre de colonnes, une graine (facultative, aléatoire si absente),
     le dictionnaire de paramètres de la carte. Utilise TAILLES_DES_OCTAVES.
     Sortie : une grille (liste de listes) de numéros de terrain : 0 herbe, 1 terre, 2 montagne, 3 mer."""
