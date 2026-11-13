@@ -147,6 +147,20 @@ def assombrir(hexa, quantite=0.15):
     r, g, b = hls_to_rgb(h, max(0, l - quantite), s) # diminution de la luminosité pour assombrir (sans passer sous 0) et retour au rgb
     return (round(r * 255) << 16) | (round(g * 255) << 8) | round(b * 255) # recréation de la forme hexadecimal et envoie
 
+NOMBRE_DE_TRIBUS_MAX = 80  # nombre maximal de tribus, donc de couleurs à générer
+
+def genererCouleursDeTribus(nombre):
+    """Génère des couleurs vives dont les teintes se répartissent sur tout le cercle des couleurs.
+    Entrée : le nombre de couleurs voulues.
+    Sortie : la liste des couleurs, en hexadécimal."""
+    couleurs = []
+    for numero in range(nombre):
+        teinte = (numero * 0.618034) % 1  # le nombre d'or éloigne chaque teinte des précédentes sans jamais se répéter
+        luminosite = (0.42, 0.56, 0.7)[numero % 3]  # on alterne sombre, moyenne et claire
+        rouge, vert, bleu = hls_to_rgb(teinte, luminosite, 0.9)  # saturation élevée : couleurs vives
+        couleurs.append((round(rouge * 255) << 16) | (round(vert * 255) << 8) | round(bleu * 255))
+    return couleurs
+
 
 TERRAINS = [0x4E7A47, 0x6E5A44, 0xC9CED3, 0x1B3A5C]  # couleurs des terrains, dans l'ordre : herbe, terre, montagne, mer
 
@@ -155,8 +169,8 @@ JOUEURS = [0xC8484F, 0x4F8FC7, 0x5FAE6B, 0xD9B84A, 0x8D6BB8]  # couleurs des 5 j
 NATIONS = [0xE6A23C, 0x3FB6A8, 0xE0706B, 0x6C8EBF, 0xB5C25A,
            0xC77DB5, 0x5BB5E0, 0xE88B4D, 0x7FD1A0, 0xA88BE0]  # couleurs des 10 nations
 
-TRIBUS = [0x6B6B6B, 0x8A8A8A, 0x555B61, 0x9A9690, 0x73706A,
-          0x7A5C45, 0x8F6B4E, 0x5E4636, 0xA17F5F, 0x6D5A48]  # couleurs des 10 tribus (les bots), dans des tons gris-marron
+TRIBUS = genererCouleursDeTribus(NOMBRE_DE_TRIBUS_MAX)
+  # couleurs des 10 tribus (les bots), dans des tons gris-marron
 
 COULEURS_INTERFACE = {  # couleurs de l'interface, accessibles par leur nom
     "fond": 0x1E2430,  # fond des écrans
@@ -1200,7 +1214,10 @@ def dessinerInterfaceDeJeu():
     Sortie : rien, l'interface est dessinée."""
     dessinerBarreDeJeu()  # la barre du bas
     dessinerClassement()  # le classement en haut à droite
-    dessinerPanneauDeConstruction() # or et boutons de construction en haut à gauche
+    dessinerPanneauDeConstruction()  # or et boutons de construction
+    dessinerPanneauDesAttaques()  # qui attaque qui
+    dessinerInfobulleDeSurvol()  # nom et troupes de la case survolée
+
 ## Fin de l'interface en jeu
 
 
@@ -1313,6 +1330,139 @@ def texteDeLaValeur(cle, valeur):
 ## Fin de l'interface des menus
 
 
+## Infobulle
+
+NOMS_DES_TERRAINS = ["Herbe", "Terre", "Montagne", "Mer"]  # dans l'ordre des numéros de terrain
+
+
+def sourisSurUnPanneau():
+    """Dit si la souris est sur un panneau d'interface (pour que les clics et l'infobulle l'ignorent).
+    Entrée : rien.
+    Sortie : True si la souris est sur le classement, la construction ou les attaques."""
+    rectangle_des_attaques = rectangleDesAttaques()
+    return (sourisDansRectangle(*RECTANGLE_CLASSEMENT) or sourisDansRectangle(*RECTANGLE_CONSTRUCTION)
+            or (rectangle_des_attaques is not None and sourisDansRectangle(*rectangle_des_attaques)))
+
+
+def dessinerInfobulleDeSurvol():
+    """Dessine près de la souris une infobulle sur la case survolée : propriétaire, troupes, territoire, terrain, bâtiment.
+    Entrée : rien. Utilise la case sous la souris, grille, terrain, troupes et batiments.
+    Sortie : rien, l'infobulle est dessinée (rien si la souris n'est pas sur la carte)."""
+    if resultat_de_la_partie is not None or sourisSurUnPanneau():
+        return
+    case = caseSousCurseur()
+    if case is None:
+        return
+    ligne, colonne = case
+    proprietaire = grille[ligne][colonne]
+    type_de_terrain = terrain[ligne][colonne]
+
+    if proprietaire == 0:  # personne ne possède la case
+        lignes = ["Mer" if type_de_terrain == 3 else "Terre libre"]
+        if type_de_terrain != 3:
+            lignes.append(NOMS_DES_TERRAINS[type_de_terrain])
+        couleur_de_la_pastille = type_de_terrain  # la couleur du terrain a le même numéro dans la palette
+    else:
+        lignes = [nomDeLEntite(proprietaire),
+                  f"Troupes : {formaterTroupes(troupes[proprietaire])}",
+                  f"Territoire : {formaterPourcentage(pourcentageDeTerritoire(proprietaire))}",
+                  NOMS_DES_TERRAINS[type_de_terrain]]
+        couleur_de_la_pastille = ID_COULEUR_ENTITES[proprietaire]["remplissage"]
+    batiment = batimentSurLaCase(ligne, colonne)
+    if batiment is not None:
+        lignes.append("Ville" if batiment["type"] == "ville" else "Poste de défense")
+
+    largeur = max(largeurDuTexte(texte, "petit") for texte in lignes) + 52
+    hauteur = 16 + len(lignes) * 22
+    x, y = pyxel.mouse_x + 18, pyxel.mouse_y + 18  # à droite et sous le curseur
+    if x + largeur > LARGEUR_ECRAN - 8:  # déborde à droite : on la met à gauche du curseur
+        x = pyxel.mouse_x - 18 - largeur
+    if y + hauteur > BARRE_Y - 8:  # déborde sur la barre du bas : on la met au-dessus du curseur
+        y = pyxel.mouse_y - 18 - hauteur
+    pyxel.rect(x, y, largeur, hauteur, COULEUR["panneau"])
+    pyxel.rectb(x, y, largeur, hauteur, COULEUR["bordure"])
+    pyxel.rect(x + 12, y + 11, 14, 14, couleur_de_la_pastille)
+    for numero, texte in enumerate(lignes):
+        ecrire(texte, x + 36, y + 10 + numero * 22, "texte" if numero == 0 else "texte_discret", "petit")
+## Fin infobulle
+
+##Interface en jeu
+
+NOMBRE_MAX_DE_LIGNES_PAR_SECTION = 5  # lignes affichées par section avant "+ n autres"
+ATTAQUES_X, ATTAQUES_Y, ATTAQUES_LARGEUR = 12, 286, 250  # sous le panneau de construction
+ATTAQUES_HAUTEUR_TITRE, ATTAQUES_HAUTEUR_LIGNE = 30, 26
+
+
+def attaquesAffichees():
+    """Sépare les attaques qui concernent le joueur, de la plus grosse à la plus petite.
+    Entrée : rien. Utilise la liste attaques.
+    Sortie : deux listes : les attaques lancées par le joueur, puis celles qu'il subit."""
+    sortantes = sorted((a for a in attaques if a["attaquant"] == JOUEUR_ACTUEL), key=lambda a: a["troupes"], reverse=True)
+    entrantes = sorted((a for a in attaques if a["cible"] == JOUEUR_ACTUEL), key=lambda a: a["troupes"], reverse=True)
+    return sortantes, entrantes
+
+
+def nombreDeLignesDeLaSection(section):
+    """Nombre de lignes dessinées pour une section (les lignes affichées, plus une ligne "+ n autres" si besoin)."""
+    return min(len(section), NOMBRE_MAX_DE_LIGNES_PAR_SECTION) + (1 if len(section) > NOMBRE_MAX_DE_LIGNES_PAR_SECTION else 0)
+
+
+def rectangleDesAttaques():
+    """Calcule la position et la taille actuelles du panneau des attaques.
+    Entrée : rien.
+    Sortie : un rectangle (x, y, largeur, hauteur), ou None s'il n'y a aucune attaque à afficher."""
+    sortantes, entrantes = attaquesAffichees()
+    hauteur = 14  # marges haut et bas
+    for section in (sortantes, entrantes):
+        if section:
+            hauteur += ATTAQUES_HAUTEUR_TITRE + nombreDeLignesDeLaSection(section) * ATTAQUES_HAUTEUR_LIGNE
+    if hauteur == 14:  # aucune section : pas de panneau
+        return None
+    return (ATTAQUES_X, ATTAQUES_Y, ATTAQUES_LARGEUR, hauteur)
+
+
+def dessinerSectionDAttaques(x, y, largeur, titre, couleur_du_titre, section, cote):
+    """Dessine une section du panneau (titre, puis une ligne par attaque).
+    Entrée : la position x, y, la largeur, le titre, sa couleur (nom), la liste d'attaques, et le côté à afficher
+    ("attaquant" pour les attaques subies, "cible" pour celles qu'on lance).
+    Sortie : la position y où la section suivante peut commencer."""
+    ecrire(titre, x + 14, y, couleur_du_titre, "legende")
+    y += ATTAQUES_HAUTEUR_TITRE
+    for attaque in section[:NOMBRE_MAX_DE_LIGNES_PAR_SECTION]:
+        entite = attaque[cote]  # l'adversaire de cette ligne
+        if entite == 0:  # 0 = terrain libre
+            nom, couleur_de_la_pastille = "Terre libre", 0  # la couleur 0 de la palette est celle de l'herbe
+        else:
+            nom, couleur_de_la_pastille = nomDeLEntite(entite), ID_COULEUR_ENTITES[entite]["remplissage"]
+        pyxel.rect(x + 14, y + 2, 14, 14, couleur_de_la_pastille)  # un carré à la couleur de l'adversaire
+        ecrire(nom, x + 36, y, "texte", "petit")
+        ecrireADroite(formaterTroupes(attaque["troupes"]), x + largeur - 14, y, "texte", "petit")  # troupes engagées dans cette attaque
+        y += ATTAQUES_HAUTEUR_LIGNE
+    nombre_cache = len(section) - NOMBRE_MAX_DE_LIGNES_PAR_SECTION
+    if nombre_cache > 0:
+        ecrire(f"+ {nombre_cache} autres", x + 36, y, "texte_discret", "petit")
+        y += ATTAQUES_HAUTEUR_LIGNE
+    return y
+
+
+def dessinerPanneauDesAttaques():
+    """Dessine le panneau des attaques en cours qui concernent le joueur (rien s'il n'y en a pas).
+    Entrée : rien.
+    Sortie : rien, le panneau est dessiné."""
+    rectangle = rectangleDesAttaques()
+    if rectangle is None:
+        return
+    x, y, largeur, hauteur = rectangle
+    pyxel.rect(x, y, largeur, hauteur, COULEUR["panneau"])
+    pyxel.rectb(x, y, largeur, hauteur, COULEUR["bordure"])
+    sortantes, entrantes = attaquesAffichees()
+    curseur_y = y + 8
+    if entrantes:
+        curseur_y = dessinerSectionDAttaques(x, curseur_y, largeur, "Attaques subies", "rouge", entrantes, "attaquant")
+    if sortantes:
+        curseur_y = dessinerSectionDAttaques(x, curseur_y, largeur, "Tu attaques", "texte_discret", sortantes, "cible")
+        
+## Fin interface en jeu
 ## Écrans (menu, réglages, fin de partie)
 ecran_actuel = "menu"  # écran affiché : "menu", "reglages", "jeu" ou "fin"
 reglages_en_cours = dict(REGLAGES_PAR_DEFAUT)  # copie : modifier les réglages ne touche pas aux valeurs par défaut
@@ -1526,7 +1676,7 @@ def drawJeu():
     """Dessine la partie : la partie visible de la carte (zoomée) puis l'interface par-dessus.
     Entrée : rien. Utilise l'image carte, la caméra, le zoom et la zone de jeu.
     Sortie : rien, l'écran est dessiné (la carte est recentrée si rien n'est visible)."""
-    pyxel.cls(20)  # on efface l'écran avec la couleur n°20 de la palette (le fond autour de la carte)
+    pyxel.cls(COULEUR["fond"])  # on efface l'écran avec la couleur n°20 de la palette (le fond autour de la carte)
     colonne_debut = max(0, int(camera_colonne // 1))  # première colonne visible (jamais avant la colonne 0)
     colonne_fin = min(COLLONNES, int(-(-(camera_colonne + ZONE_JEU_LARGEUR/ zoom) // 1)))  # dernière colonne visible ; -(-a // 1) est une astuce pour arrondir vers le haut
     ligne_debut = max(0, int(camera_ligne // 1))  # première ligne visible
