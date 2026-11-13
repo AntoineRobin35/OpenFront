@@ -210,10 +210,10 @@ REGLAGES_PAR_DEFAUT = {  # réglages d'une partie quand le joueur ne change rien
     **PARAMETRES_CARTE_PAR_DEFAUT,  # on recopie ici tous les paramètres de la carte
 }
 
-DIFFICULTES = {  # delais : temps entre deux décisions d'un bot (en étapes) ; expansion / reserve : part du max de troupes gardée en réserve
-    "Facile":    {"delais": (60, 120), "expansion": 0.30, "reserve": 0.50},  # bots lents et prudents
-    "Normale":   {"delais": (40, 80),  "expansion": 0.15, "reserve": 0.35},
-    "Difficile": {"delais": (20, 45),  "expansion": 0.08, "reserve": 0.25},  # bots rapides et agressifs
+DIFFICULTES = {
+    "Facile":    {"delais": (60, 120), "expansion": 0.30, "reserve": 0.50, "depart": 0.4, "plafond": 1 / 3, "croissance": 0.5},
+    "Normale":   {"delais": (40, 80),  "expansion": 0.15, "reserve": 0.35, "depart": 1.0, "plafond": 1.0,   "croissance": 1.0},
+    "Difficile": {"delais": (20, 45),  "expansion": 0.08, "reserve": 0.25, "depart": 1.5, "plafond": 1.5,   "croissance": 1.25},
 }
 difficulte_en_cours = DIFFICULTES["Normale"]  # la difficulté de la partie en cours (changée au lancement d'une partie)
 
@@ -492,7 +492,7 @@ def maxTroupe(proprietaire):
     Sortie : le maximum de troupes (nombre décimal)."""
     maxi = 2 * (1000 * nb_case[proprietaire] ** 0.6 + 50000)  # grandit avec le nombre de cases, mais de moins en moins vite (puissance 0,6)
     if proprietaire >= PREMIERE_TRIBU:
-        maxi /= 3  # les tribus sont plus faibles que les joueurs et les nations
+        maxi *= difficulte_en_cours["plafond"]  # les tribus sont plus faibles que les joueurs et les nations
     return maxi
 
 
@@ -507,7 +507,7 @@ def generationTroupe():
         maxi = maxTroupe(proprietaire)  # son maximum
         ajout = (10 + troupe_actuel ** 0.73 / 4) * (1 - troupe_actuel / maxi)  # base de production qui grandit avec les troupes, multipliée par (1 - remplissage) : tend vers 0 près du max, donc la croissance ralentit
         if proprietaire >= PREMIERE_TRIBU:
-            ajout *= 0.5  # les tribus produisent deux fois moins
+            ajout *= difficulte_en_cours["croissance"]
         troupes[proprietaire] = min(troupe_actuel + ajout, maxi)  # on ajoute sans jamais dépasser le maximum
 
 
@@ -788,7 +788,7 @@ def lancerPartie(reglages):
     troupes_de_depart = reglages["troupes_de_depart"]  # troupes de départ choisies
     troupes = {j: troupes_de_depart for j in range(1, N + 1)}  # toutes les entités démarrent avec ce nombre...
     for j in range(PREMIERE_TRIBU, N + 1):
-        troupes[j] = int(troupes_de_depart * 0.4)  # ...sauf les tribus, qui démarrent avec 40 % de ce nombre
+        troupes[j] = int(troupes_de_depart * difficulte_en_cours["depart"])  # depend de la difficulté choisit
     prochain_coup_bot = {j: randint(10, 50) for j in range(PREMIERE_TRIBU, N + 1)}  # premier tour des bots décalé au hasard, pour qu'ils ne jouent pas tous en même temps
 
     initFrontiere()  # calcule les frontières de départ
