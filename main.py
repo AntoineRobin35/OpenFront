@@ -233,6 +233,22 @@ adversaires_au_depart = 0  # nombre d'adversaires au début de la partie
 derniers_reglages = None  # réglages de la dernière partie, pour pouvoir rejouer
 ## Fin des paramètres et de l'état du jeu
 
+## Economie
+REVENU_JOUEUR_PAR_ETAPE = 100
+REVENU_TRIBU_PAR_ETAPE = 50
+BONUS_TROUPES_VILLE = 250000
+PORTEE_POSTE_DE_DEFENSE = 30
+MULTIPLICATEUR_PERTES_POSTE = 5
+MULTIPLICATEUR_LENTEUR_POSTE = 3
+
+argent = {}
+batiments = []
+batiment_a_placer = None          # None, "ville" ou "poste"
+
+RECTANGLE_CONSTRUCTION = (12, 12, 250, 262)
+BOUTON_VILLE = (24, 118, 226, 48)
+BOUTON_POSTE = (24, 174, 226, 48)
+## Fin economie
 
 ## Fenêtre Pyxel, image de la carte et grille des propriétaires
 pyxel.init(LARGEUR_ECRAN, HAUTEUR_ECRAN, title="OpenFront")  # crée la fenêtre du jeu
@@ -490,11 +506,11 @@ def maxTroupe(proprietaire):
     """Calcule le nombre maximum de troupes d'une entité (il grandit avec son territoire, et est divisé par 3 pour une tribu).
     Entrée : le numéro de l'entité. Utilise nb_case et PREMIERE_TRIBU.
     Sortie : le maximum de troupes (nombre décimal)."""
-    maxi = 2 * (1000 * nb_case[proprietaire] ** 0.6 + 50000)  # grandit avec le nombre de cases, mais de moins en moins vite (puissance 0,6)
+    maxi = 2 * (1000 * nb_case[proprietaire] ** 0.6 + 50000) # grandit avec le nombre de cases, mais de moins en moins vite (puissance 0,6)
+    maxi += BONUS_TROUPES_VILLE * nombreDeBatiments(proprietaire, "ville")
     if proprietaire >= PREMIERE_TRIBU:
-        maxi *= difficulte_en_cours["plafond"]  # les tribus sont plus faibles que les joueurs et les nations
+        maxi *= difficulte_en_cours["plafond"]
     return maxi
-
 
 def generationTroupe():
     """Fait gagner des troupes à chaque entité qui a encore du territoire (la croissance ralentit près du maximum, et les tribus sont plus lentes).
@@ -536,8 +552,12 @@ def couts(attaque, x, y, front):
     cible = attaque["cible"]  # qui est attaqué
 
     if cible == 0:  # cible 0 = terrain libre : personne ne se défend
-        fraction = borner(2000 * cout_case / A, 5, 100) / (2 * front)  # plus l'attaque a de troupes, plus ça va vite (entre 5 et 100), réparti sur tout le front
-        return mag / 5, 0, fraction  # pertes de l'attaquant faibles (mag / 5), aucune perte côté défenseur
+        fraction = borner(2000 * cout_case / A, 5, 100) / (2 * front)
+        return mag / 5, 0, fraction
+
+    if aUnPosteDeDefenseProche(cible, x, y):  # le défenseur a un poste de défense à moins de 30 cases
+        mag *= MULTIPLICATEUR_PERTES_POSTE  # l'attaquant perd 5 fois plus de troupes
+        cout_case *= MULTIPLICATEUR_LENTEUR_POSTE  # et avance 3 fois plus lentement
 
     D = troupes[cible]  # troupes du défenseur
     densite = D / max(1, nb_case[cible])  # nombre de défenseurs par case : plus c'est dense, plus c'est dur de percer (max(1, ...) évite de diviser par 0)
@@ -686,20 +706,140 @@ def click():
     """Gère un clic gauche sur la carte : lance une attaque du joueur sur le propriétaire de la case cliquée.
     Entrée : rien. Utilise la case sous la souris, la grille, ratio_attaque et RECTANGLE_CLASSEMENT (clic ignoré sur le classement).
     Sortie : rien, une attaque est lancée si la case est conquérable et n'est pas déjà au joueur."""
-    if sourisDansRectangle(*RECTANGLE_CLASSEMENT):  # le classement est dessiné par-dessus la carte : on ne clique pas à travers
+    if sourisDansRectangle(*RECTANGLE_CLASSEMENT) or sourisDansRectangle(*RECTANGLE_CONSTRUCTION):
         return
-    case = caseSousCurseur()  # case visée (ou None)
-    if case is None:  # la souris n'est pas sur la carte
+    case = caseSousCurseur()# case visée (ou None)
+    if case is None: # la souris n'est pas sur la carte
         return
 
-    ligne, colonne = case  # on sépare la ligne et la colonne
-    proprietaire = grille[ligne][colonne]  # à qui est la case cliquée
+    ligne, colonne = case # on sépare la ligne et la colonne
+    if batiment_a_placer is not None:
+        essayerDeConstruire(batiment_a_placer, ligne, colonne)
+        return
 
-    if proprietaire != JOUEUR_ACTUEL and estConquerable(ligne, colonne):  # pas déjà à nous, et pas de la mer
-        lancerAttaque(JOUEUR_ACTUEL, proprietaire, ratio_attaque)  # on attaque son propriétaire avec la part choisie sur le curseur
+    proprietaire = grille[ligne][colonne] # à qui est la case cliquée
+    if proprietaire != JOUEUR_ACTUEL and estConquerable(ligne, colonne): # pas déjà à nous, et pas de la mer
+        lancerAttaque(JOUEUR_ACTUEL, proprietaire, ratio_attaque) # on attaque son propriétaire avec la part choisie sur le curseur
 ## Fin de l'interaction du joueur
 
 
+## Economie
+def nombreDeBatiments(proprietaire, type_de_batiment):
+    return sum(1 for b in batiments if b["proprietaire"] == proprietaire and b["type"] == type_de_batiment)
+
+
+def coutDuBatiment(type_de_batiment, proprietaire):
+    nombre_deja_construit = nombreDeBatiments(proprietaire, type_de_batiment)
+    if type_de_batiment == "ville":
+        return min(1_000_000, 125_000 * 2 ** nombre_deja_construit)
+    return min(250_000, 50_000 * (nombre_deja_construit + 1))
+
+
+def generationDeLArgent():
+    for entite in range(1, N + 1):
+        if nb_case[entite] > 0:
+            argent[entite] += REVENU_TRIBU_PAR_ETAPE if entite >= PREMIERE_TRIBU else REVENU_JOUEUR_PAR_ETAPE
+
+
+def retirerLesBatimentsPerdus():
+    global batiments
+    batiments = [b for b in batiments if grille[b["ligne"]][b["colonne"]] == b["proprietaire"]]
+
+
+def aUnPosteDeDefenseProche(proprietaire, ligne, colonne):
+    for b in batiments:
+        if b["type"] == "poste" and b["proprietaire"] == proprietaire:
+            if (b["ligne"] - ligne) ** 2 + (b["colonne"] - colonne) ** 2 <= PORTEE_POSTE_DE_DEFENSE ** 2:
+                return True
+    return False
+
+
+def batimentSurLaCase(ligne, colonne):
+    for b in batiments:
+        if b["ligne"] == ligne and b["colonne"] == colonne:
+            return b
+    return None
+
+
+def essayerDeConstruire(type_de_batiment, ligne, colonne):
+    global batiment_a_placer
+    if grille[ligne][colonne] != JOUEUR_ACTUEL or batimentSurLaCase(ligne, colonne) is not None:
+        return
+    cout = coutDuBatiment(type_de_batiment, JOUEUR_ACTUEL)
+    if argent[JOUEUR_ACTUEL] < cout:
+        return
+    argent[JOUEUR_ACTUEL] -= cout
+    batiments.append({"type": type_de_batiment, "proprietaire": JOUEUR_ACTUEL, "ligne": ligne, "colonne": colonne})
+    batiment_a_placer = None
+
+def formaterOr(valeur):
+    if valeur >= 1_000_000:
+        return f"{valeur / 1_000_000:.2f} M".replace(".", ",")
+    if valeur >= 1000:
+        return f"{valeur / 1000:.1f} K".replace(".", ",").replace(",0 K", " K")
+    return str(int(valeur))
+
+
+def mettreAJourConstruction():
+    global batiment_a_placer
+    for type_de_batiment, rectangle in (("ville", BOUTON_VILLE), ("poste", BOUTON_POSTE)):
+        if boutonClique(*rectangle):
+            batiment_a_placer = None if batiment_a_placer == type_de_batiment else type_de_batiment
+
+
+def dessinerBoutonDeConstruction(rectangle, libelle, type_de_batiment):
+    x, y, largeur, hauteur = rectangle
+    cout = coutDuBatiment(type_de_batiment, JOUEUR_ACTUEL)
+    abordable = argent[JOUEUR_ACTUEL] >= cout
+    selectionne = batiment_a_placer == type_de_batiment
+    survole = abordable and sourisDansRectangle(x, y, largeur, hauteur)
+
+    if selectionne:
+        couleur_fond = "bouton_principal"
+    else:
+        couleur_fond = "bouton_survole" if survole else "bouton"
+    couleur_texte = "texte_sur_principal" if selectionne else ("texte" if abordable else "texte_discret")
+    pyxel.rect(x, y, largeur, hauteur, COULEUR[couleur_fond])
+    pyxel.rectb(x, y, largeur, hauteur, COULEUR["bordure"])
+    decalage_texte = (hauteur - TAILLES_DE_POLICE["bouton"]) // 2 - 2
+    ecrire(libelle, x + 14, y + decalage_texte, couleur_texte, "bouton")
+    ecrireADroite(formaterOr(cout), x + largeur - 14, y + decalage_texte, couleur_texte, "bouton")
+
+
+def dessinerPanneauDeConstruction():
+    x, y, largeur, hauteur = RECTANGLE_CONSTRUCTION
+    pyxel.rect(x, y, largeur, hauteur, COULEUR["panneau"])
+    pyxel.rectb(x, y, largeur, hauteur, COULEUR["bordure"])
+
+    revenu_par_seconde = REVENU_JOUEUR_PAR_ETAPE * IMAGES_PAR_SECONDE / VITESSE_ATTAQUE
+    ecrire("Or", x + 14, y + 8, "texte_discret", "legende")
+    ecrire(formaterOr(argent[JOUEUR_ACTUEL]), x + 14, y + 28, "bouton_principal", "bouton")
+    ecrireADroite(f"+{int(revenu_par_seconde):,} / s".replace(",", " "), x + largeur - 14, y + 36, "texte_discret", "petit")
+    pyxel.line(x + 10, y + 72, x + largeur - 10, y + 72, COULEUR["bordure"])
+    ecrire("Construire", x + 14, y + 84, "texte_discret", "legende")
+
+    dessinerBoutonDeConstruction(BOUTON_VILLE, "Ville", "ville")
+    dessinerBoutonDeConstruction(BOUTON_POSTE, "Poste", "poste")
+    if batiment_a_placer is not None:
+        ecrire("Clique sur ton territoire", x + 14, y + 236, "texte", "petit")
+
+
+def dessinerBatiments():
+    taille = max(4, int(zoom * 2))
+    for batiment in batiments:
+        x = ZONE_JEU_X + (batiment["colonne"] + 0.5 - camera_colonne) * zoom
+        y = ZONE_JEU_Y + (batiment["ligne"] + 0.5 - camera_ligne) * zoom
+        if not (-taille <= x <= ZONE_JEU_LARGEUR + taille and -taille <= y <= ZONE_JEU_HAUTEUR + taille):
+            continue
+        couleur_du_type = COULEUR["bouton_principal"] if batiment["type"] == "ville" else COULEUR["texte"]
+        pyxel.rect(x - taille / 2 - 1, y - taille / 2 - 1, taille + 2, taille + 2, COULEUR["fond"])
+        pyxel.rect(x - taille / 2, y - taille / 2, taille, taille, couleur_du_type)
+
+    if batiment_a_placer == "poste" and sourisDansRectangle(ZONE_JEU_X, ZONE_JEU_Y, ZONE_JEU_LARGEUR, ZONE_JEU_HAUTEUR):
+        pyxel.circb(pyxel.mouse_x, pyxel.mouse_y, int(PORTEE_POSTE_DE_DEFENSE * zoom), COULEUR["texte_discret"])
+        
+## Fin economie
+        
 ## Lancement d'une partie
 def territoireDepart(ligne_du_centre, colonne_du_centre, rayon):
     """Génère les cases d'un disque autour d'un centre (sans sortir de la carte).
@@ -763,7 +903,7 @@ def lancerPartie(reglages):
     Utilise LIGNES, COLLONNES, DIFFICULTES et toutes les variables d'état du jeu.
     Sortie : rien, l'état du jeu, la grille, le terrain et l'image de la carte sont modifiés."""
     global terrain, grille, attaques, nb_case, frontiere, troupes, prochain_coup_bot, difficulte_en_cours, total_cases_conquerables, \
-        resultat_de_la_partie, message_de_fin, part_maximale_de_territoire, adversaires_au_depart, numero_d_etape  # global : on modifie les variables du jeu, pas des copies locales
+        resultat_de_la_partie, message_de_fin, part_maximale_de_territoire, adversaires_au_depart, numero_d_etape, argent, batiments, batiment_a_placer  # global : on modifie les variables du jeu, pas des copies locales
     resultat_de_la_partie = None  # la partie n'est pas finie
     message_de_fin = ""  # pas de message
     part_maximale_de_territoire = 0.0  # on repart sans record
@@ -790,7 +930,11 @@ def lancerPartie(reglages):
     for j in range(PREMIERE_TRIBU, N + 1):
         troupes[j] = int(troupes_de_depart * difficulte_en_cours["depart"])  # depend de la difficulté choisit
     prochain_coup_bot = {j: randint(10, 50) for j in range(PREMIERE_TRIBU, N + 1)}  # premier tour des bots décalé au hasard, pour qu'ils ne jouent pas tous en même temps
-
+    
+    argent = {j: 0 for j in range(1, N + 1)}
+    batiments = []
+    batiment_a_placer = None
+    
     initFrontiere()  # calcule les frontières de départ
     compteCase()  # compte les cases de chacun
     reddessinerTout()  # dessine la carte complète
@@ -1056,6 +1200,7 @@ def dessinerInterfaceDeJeu():
     Sortie : rien, l'interface est dessinée."""
     dessinerBarreDeJeu()  # la barre du bas
     dessinerClassement()  # le classement en haut à droite
+    dessinerPanneauDeConstruction() # or et boutons de construction en haut à gauche
 ## Fin de l'interface en jeu
 
 
@@ -1359,6 +1504,7 @@ def updateJeu():
     Sortie : rien, l'état du jeu est modifié."""
     deplacerCamera()  # zoom et déplacement
     mettreAJourCurseurAttaque()  # curseur de la part de troupes
+    mettreAJourConstruction()
     if pyxel.btnp(pyxel.KEY_C):  # touche C
         centrerCarte()  # vue d'ensemble de la carte
     if pyxel.btnp(pyxel.KEY_ESCAPE):  # touche Échap
@@ -1371,6 +1517,9 @@ def updateJeu():
         etapeAttaque()  # les attaques avancent
         generationTroupe()  # les troupes augmentent
         tourBots()  # les bots décident
+        generationDeLArgent()  # l'or augmente
+        retirerLesBatimentsPerdus()  # un bâtiment dont la case a été conquise disparaît
+        verifierFinDePartie()  # victoire ou défaite ?
 
 
 def drawJeu():
@@ -1400,7 +1549,7 @@ def drawJeu():
               colonne_debut, ligne_debut,  # coin haut gauche du morceau à copier
               largeur_dessinee, hauteur_dessinee,  # taille du morceau à copier
               scale=zoom)  # agrandissement : chaque case devient un carré de "zoom" pixels
-
+    dessinerBatiments()
     pyxel.clip()  # on enlève la limite pour pouvoir dessiner l'interface partout
     dessinerInterfaceDeJeu()  # barre du bas et classement
 
